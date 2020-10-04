@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SA57CyclicShift": {
+      "commandName": "Project",
+      "workingDirectory": "."
+    }
+  }
+}

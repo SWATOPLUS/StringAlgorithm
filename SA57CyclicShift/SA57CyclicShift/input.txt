@@ -1,0 +1,9 @@
+10
+aaaaaaaaab
+aaaaaaaaba
+10
+aaaaaaaaab
+aaaaaaabaa
+7
+aabaabc
+baabaaa
