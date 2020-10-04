@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SA52Period": {
+      "commandName": "Project",
+      "workingDirectory": "."
+    }
+  }
+}
