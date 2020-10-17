@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SA5GrowingNames": {
+      "commandName": "Project",
+      "workingDirectory": "."
+    }
+  }
+}
