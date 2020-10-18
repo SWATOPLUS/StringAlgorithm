@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -16,207 +17,131 @@ namespace SA5GrowingNames
                 .Skip(1)
                 .ToArray();
 
-            var rawGroups = Enumerable.Range(0, rows.Length)
-                .GroupBy(x => rows[x].Length)
-                .OrderBy(x => x.Key)
-                .ToDictionary(x => x.Key, x => x.ToHashSet());
+            var tree = new PrefixTree<char, bool>();
 
-            var groups = new HashSet<int>[rawGroups.Keys.Max() + 1];
-
-            for (var i = 0; i < groups.Length; i++)
+            foreach (var row in rows)
             {
-                if (rawGroups.ContainsKey(i))
-                {
-                    groups[i] = rawGroups[i];
-                }
-                else
-                {
-                    groups[i] = new HashSet<int>();
-                }
+                tree.AddString(row, true);
             }
 
-            var ranks = new Dictionary<int, int>();
 
-            for (var i = 0; i < groups.Length; i++)
-            {
-                if (groups[i].Count == 0)
-                {
-                    continue;
-                }
-
-                var tree = new PrefixTree<int>();
-
-                foreach (var rowId in groups.Take(i).SelectMany(x => x))
-                {
-                    tree.AddString(rows[rowId], rowId);
-                }
-
-                foreach (var name in groups[i])
-                {
-                    var maxRank = 0;
-
-                    foreach (var rowId in tree.FindAllSubstrings(rows[name]))
-                    {
-                        var rank = ranks[rowId];
-                        var text = rows[rowId];
-
-                        if (ranks[rowId] > maxRank)
-                        {
-                            maxRank = rank;
-                        }
-
-                        groups[text.Length - 1].Remove(rowId);
-                    }
-
-                    ranks[name] = maxRank + 1;
-                }
-            }
-
-            var output = ranks.Values.Max().ToString();
+            var output = tree.FindLongestChainLength().ToString();
 
             File.WriteAllText(OutputFileName, output);
         }
     }
 
-    public class PrefixTree<T> where T : struct
+    public class PrefixTree<TChar, TTag> where TTag : struct
     {
-        private const char AlphabetStart = 'a';
-        private const char AlphabetEnd = 'z';
-        private const int AlphabetSize = AlphabetEnd - AlphabetStart + 1;
+        private readonly PrefixTreeNode _root = new PrefixTreeNode(null, default);
 
-        private readonly PrefixTreeLeaf _root = new PrefixTreeLeaf(null, -1);
-
-        public void AddString(string s, T tag)
+        public void AddString(IEnumerable<TChar> s, TTag tag)
         {
             var node = _root;
 
-            foreach (var code in s.Select(EncodeChar))
+            foreach (var c in s)
             {
-                node = node.UpdateChild(code);
+                node = node.UpdateChild(c);
             }
 
             node.Tag = tag;
         }
 
-        private static int EncodeChar(char c)
+        public int FindLongestChainLength()
         {
-            return c - AlphabetStart;
-        }
+            var rates = new Dictionary<PrefixTreeNode, int>();
+            var queue = new Queue<PrefixTreeNode>();
 
-        private PrefixTreeLeaf GetSuffixLink(PrefixTreeLeaf node)
-        {
-            if (node.SuffixLink == null)
+            rates[_root] = 0;
+            queue.Enqueue(_root);
+
+            while (queue.Any())
             {
-                if (node == _root || node.ParentLink == _root)
+                var node = queue.Dequeue();
+                var rate = Math.Max(rates[node.ParentLink ?? node], rates[node.GetSuffixLink()]);
+
+                if (node.Tag != null)
                 {
-                    node.SuffixLink = _root;
+                    rate++;
                 }
-                else
+
+                rates[node] = rate;
+
+                foreach (var child in node.Children.Values)
                 {
-                    node.SuffixLink = GetAutoMove(GetSuffixLink(node.ParentLink), node.Code);
+                    queue.Enqueue(child);
                 }
             }
 
-            return node.SuffixLink;
+            return rates.Values.Max();
         }
 
-        public IEnumerable<T> FindAllSubstrings(string s)
+        private class PrefixTreeNode
         {
-            var node = _root;
+            private Dictionary<TChar, PrefixTreeNode> AutoMove { get; } = new Dictionary<TChar, PrefixTreeNode>();
 
-            for (var i = 0; i < s.Length; i++)
+            private PrefixTreeNode SuffixLink { get; set; }
+
+            public Dictionary<TChar, PrefixTreeNode> Children { get; } = new Dictionary<TChar, PrefixTreeNode>();
+
+            public PrefixTreeNode ParentLink { get; }
+
+            public TChar Char { get; }
+
+            public TTag? Tag { get; set; }
+
+            public PrefixTreeNode(PrefixTreeNode parent, TChar c)
             {
-                var code = EncodeChar(s[i]);
+                ParentLink = parent;
+                Char = c;
+            }
 
-                node = GetAutoMove(node, code);
-
-                for (var u = node; u != _root; u = GetSuffixFlaggedLink(u))
+            public PrefixTreeNode UpdateChild(TChar c)
+            {
+                if (!Children.ContainsKey(c))
                 {
-                    if (u.Tag != null)
+                    Children[c] = new PrefixTreeNode(this, c);
+                }
+
+                return Children[c];
+            }
+
+            public PrefixTreeNode GetSuffixLink()
+            {
+                if (SuffixLink == null)
+                {
+                    if (ParentLink?.ParentLink == null)
                     {
-                        yield return (u.Tag.Value);
-                    }
-                }
-            }
-        }
-
-        private PrefixTreeLeaf GetAutoMove(PrefixTreeLeaf node, int code)
-        {
-            if (node.AutoMove[code] == null)
-            {
-                if (node.Children[code] != null)
-                {
-                    node.AutoMove[code] = node.Children[code];
-                }
-                else if (node == _root)
-                {
-                    node.AutoMove[code] = _root;
-                }
-                else
-                {
-                    node.AutoMove[code] = GetAutoMove(GetSuffixLink(node), code);
-                }
-            }
-
-            return node.AutoMove[code];
-        }
-        private PrefixTreeLeaf GetSuffixFlaggedLink(PrefixTreeLeaf node)
-        {
-            if (node.SuffixFlaggedLink == null)
-            {
-                var suffixLink = GetSuffixLink(node);
-                if (suffixLink == _root)
-                {
-                    node.SuffixFlaggedLink = _root;
-                }
-                else
-                {
-                    if (suffixLink.Tag != null)
-                    {
-                        node.SuffixFlaggedLink = suffixLink;
+                        SuffixLink = ParentLink ?? this;
                     }
                     else
                     {
-                        node.SuffixFlaggedLink = GetSuffixFlaggedLink(suffixLink);
+                        SuffixLink = ParentLink.GetSuffixLink().GetAutoMove(Char);
                     }
                 }
+
+                return SuffixLink;
             }
 
-            return node.SuffixFlaggedLink;
-        }
-
-        private class PrefixTreeLeaf
-        {
-            public PrefixTreeLeaf[] Children { get; }
-
-            public PrefixTreeLeaf[] AutoMove { get; }
-
-            public PrefixTreeLeaf SuffixLink { get; set; }
-
-            public PrefixTreeLeaf SuffixFlaggedLink { get; set; }
-
-            public PrefixTreeLeaf ParentLink { get; }
-
-            public int Code { get; }
-
-            public T? Tag { get; set; }
-
-            public PrefixTreeLeaf(PrefixTreeLeaf parent, int code)
+            public PrefixTreeNode GetAutoMove(TChar c)
             {
-                Children = new PrefixTreeLeaf[AlphabetSize];
-                AutoMove = new PrefixTreeLeaf[AlphabetSize];
-                ParentLink = parent;
-                Code = code;
-            }
-
-            public PrefixTreeLeaf UpdateChild(int code)
-            {
-                if (Children[code] == null)
+                if (!AutoMove.ContainsKey(c))
                 {
-                    Children[code] = new PrefixTreeLeaf(this, code);
+                    if (Children.ContainsKey(c))
+                    {
+                        AutoMove[c] = Children[c];
+                    }
+                    else if (ParentLink == null)
+                    {
+                        AutoMove[c] = this;
+                    }
+                    else
+                    {
+                        AutoMove[c] = GetSuffixLink().GetAutoMove(c);
+                    }
                 }
 
-                return Children[code];
+                return AutoMove[c];
             }
         }
     }
