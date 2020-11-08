@@ -17,11 +17,11 @@ namespace SA5GrowingNames
                 .Skip(1)
                 .ToArray();
 
-            var tree = new PrefixTree<char, bool>();
+            var tree = new PrefixTree();
 
             foreach (var row in rows)
             {
-                tree.AddString(row, true);
+                tree.AddString(row);
             }
 
 
@@ -31,79 +31,134 @@ namespace SA5GrowingNames
         }
     }
 
-    public class PrefixTree<TChar, TTag> where TTag : struct
+    public class PrefixTree
     {
         private readonly PrefixTreeNode _root = new PrefixTreeNode(null, default);
 
-        public void AddString(IEnumerable<TChar> s, TTag tag)
+        private readonly List<PrefixTreeNode> _flagNodes = new List<PrefixTreeNode>();
+
+        public void AddString(string s)
         {
             var node = _root;
 
-            foreach (var c in s)
+            for (var i = 0; i < s.Length; i++)
             {
-                node = node.UpdateChild(c);
+                node = node.UpdateChild((byte)(s[i] - 'a'));
             }
 
-            node.Tag = tag;
+            node.Flag = true;
+
+            _flagNodes.Add(node);
         }
 
         public int FindLongestChainLength()
         {
-            var rates = new Dictionary<PrefixTreeNode, int>();
-            var queue = new Queue<PrefixTreeNode>();
+            var stack = new Stack<PrefixTreeNode>();
+            var maxRate = 0;
 
-            rates[_root] = 0;
-            queue.Enqueue(_root);
+            _root.Rate = 0;
+            _flagNodes.ForEach(stack.Push);
 
-            while (queue.Any())
+            while (stack.Count > 0)
             {
-                var node = queue.Dequeue();
-                var rate = Math.Max(rates[node.ParentLink ?? node], rates[node.GetSuffixLink()]);
+                var node = stack.Peek();
+                var parent = node.ParentLink;
+                var suffixLink = node.GetSuffixLink();
 
-                if (node.Tag != null)
+                if (parent.Rate == null)
+                {
+                    stack.Push(parent);
+
+                    continue;
+                }
+
+                if (suffixLink.Rate == null)
+                {
+                    stack.Push(suffixLink);
+
+                    continue;
+                }
+
+                stack.Pop();
+
+                var rate = Math.Max(parent.Rate.Value, suffixLink.Rate.Value);
+
+                if (node.Flag)
                 {
                     rate++;
                 }
 
-                rates[node] = rate;
+                node.Rate = rate;
 
-                foreach (var child in node.Children.Values)
+                if (maxRate < rate)
                 {
-                    queue.Enqueue(child);
+                    maxRate = rate;
                 }
             }
 
-            return rates.Values.Max();
+            return maxRate;
         }
 
         private class PrefixTreeNode
         {
-            private Dictionary<TChar, PrefixTreeNode> AutoMove { get; } = new Dictionary<TChar, PrefixTreeNode>();
+            private static int NodeId;
+            private static readonly Dictionary<(int, byte), PrefixTreeNode> AutoMoves = new Dictionary<(int, byte), PrefixTreeNode>();
+            public static readonly Dictionary<(int, byte), PrefixTreeNode> Children = new Dictionary<(int, byte), PrefixTreeNode>();
 
-            private PrefixTreeNode SuffixLink { get; set; }
+            public readonly int _nodeId = NodeId++;
 
-            public Dictionary<TChar, PrefixTreeNode> Children { get; } = new Dictionary<TChar, PrefixTreeNode>();
+            private PrefixTreeNode SuffixLink;
 
-            public PrefixTreeNode ParentLink { get; }
-
-            public TChar Char { get; }
-
-            public TTag? Tag { get; set; }
-
-            public PrefixTreeNode(PrefixTreeNode parent, TChar c)
+            public PrefixTreeNode GetChildren(byte c)
             {
+                Children.TryGetValue((_nodeId, c), out var result);
+
+                return result;
+            }
+
+
+            public void SetChildren(byte c, PrefixTreeNode value) => Children[(_nodeId, c)] = value;
+
+            private PrefixTreeNode GetAutoMoveNode(byte c)
+            {
+                AutoMoves.TryGetValue((_nodeId, c), out var result);
+
+                return result;
+            }
+
+            private void SetAutoMoveNode(byte c, PrefixTreeNode value) => AutoMoves[(_nodeId, c)] = value;
+
+            public readonly PrefixTreeNode ParentLink;
+
+            public readonly byte Char;
+
+            public int? Rate;
+
+            public bool Flag;
+
+            public PrefixTreeNode(PrefixTreeNode parent, byte c)
+            {
+                if (parent == null)
+                {
+                    Rate = 0;
+                }
+
                 ParentLink = parent;
                 Char = c;
             }
 
-            public PrefixTreeNode UpdateChild(TChar c)
+            public PrefixTreeNode UpdateChild(byte c)
             {
-                if (!Children.ContainsKey(c))
+                var child = GetChildren(c);
+
+                if (child == null)
                 {
-                    Children[c] = new PrefixTreeNode(this, c);
+                    child = new PrefixTreeNode(this, c);
+
+                    SetChildren(c, child);
                 }
 
-                return Children[c];
+                return child;
             }
 
             public PrefixTreeNode GetSuffixLink()
@@ -123,25 +178,25 @@ namespace SA5GrowingNames
                 return SuffixLink;
             }
 
-            public PrefixTreeNode GetAutoMove(TChar c)
+            public PrefixTreeNode GetAutoMove(byte c)
             {
-                if (!AutoMove.ContainsKey(c))
+                if (GetAutoMoveNode(c) == null)
                 {
-                    if (Children.ContainsKey(c))
+                    if (GetChildren(c) != null)
                     {
-                        AutoMove[c] = Children[c];
+                        SetAutoMoveNode(c, GetChildren(c));
                     }
                     else if (ParentLink == null)
                     {
-                        AutoMove[c] = this;
+                        SetAutoMoveNode(c, this);
                     }
                     else
                     {
-                        AutoMove[c] = GetSuffixLink().GetAutoMove(c);
+                        SetAutoMoveNode(c, GetSuffixLink().GetAutoMove(c));
                     }
                 }
 
-                return AutoMove[c];
+                return GetAutoMoveNode(c);
             }
         }
     }
