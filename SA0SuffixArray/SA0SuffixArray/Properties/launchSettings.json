@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "SA0SuffixArray": {
+      "commandName": "Project",
+      "commandLineArgs": "< input.txt > output.txt",
+      "workingDirectory": "."
+    }
+  }
+}
