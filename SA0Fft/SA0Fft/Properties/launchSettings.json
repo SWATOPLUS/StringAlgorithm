@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "SA0Fft": {
+      "commandName": "Project",
+      "commandLineArgs": "< input.txt > output.txt",
+      "workingDirectory": "."
+    }
+  }
+}
