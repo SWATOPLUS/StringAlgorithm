@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SA62ThreeOccurrences": {
+      "commandName": "Project",
+      "workingDirectory": "."
+    }
+  }
+}
