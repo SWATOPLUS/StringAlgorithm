@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SA61UniqueSubstringCount": {
+      "commandName": "Project",
+      "workingDirectory": "."
+    }
+  }
+}
